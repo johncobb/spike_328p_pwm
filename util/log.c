@@ -1,0 +1,158 @@
+/*
+ * log.c
+ *
+ *  Created on: Oct 20, 2014
+ *      Author: jcobb
+ */
+
+#define BAUD 38400
+
+#include <stdio.h>
+#include <string.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/pgmspace.h>
+#include <util/delay.h>
+#include <util/setbaud.h>
+#include "clock.h"
+#include "log.h"
+
+static const char _tag[] PROGMEM = "debug: ";
+
+void _debug_byte(unsigned char byte);
+
+const unsigned char DEBUG_hex[] PROGMEM = "0123456789ABCDEF";
+
+debug_rx_cb_t debug_rx_cb;
+debug_out_cb_t debug_out_cb;
+
+int _debug_putch(char data, FILE *dummy);
+
+void _debug_init(debug_rx_cb_t cb)
+{
+	//UBRR0H = UBRRH_VALUE;
+	//UBRR0L = UBRRL_VALUE;
+
+
+	uint8_t baudrate = 51; // 9600
+	UBRR0H = (unsigned char) (baudrate>>8);
+	UBRR0L = (unsigned char) baudrate;
+
+	UCSR0B |= (1<<RXCIE0);
+
+
+//#if USE_2X
+	//UCSR0A |= _BV(U2X0);
+//#else
+	//UCSR0A &= ~(_BV(U2X0));
+//#endif
+
+	UCSR0B |= (1 << RXEN0) | (1 << TXEN0);
+	UCSR0C |= (1 << UCSZ01) | (1 << UCSZ00);
+
+	_debug_set_rx_cb(cb);
+	fdevopen(_debug_putch, NULL);
+}
+
+
+ISR(DEBUG_ISR_VECTOR)
+{
+	char data = UDR0;
+	if (debug_rx_cb != 0) debug_rx_cb(data);
+}
+
+void _debug_set_rx_cb(debug_rx_cb_t cb)
+{
+	debug_rx_cb = cb;
+}
+
+void _debug_set_out_cb(debug_out_cb_t func)
+{
+	debug_out_cb = func;
+}
+
+int _debug_putch(char data, FILE *dummy)
+{
+	_debug_byte((uint8_t) data);
+
+	if (debug_out_cb)
+	debug_out_cb((uint8_t)data);
+
+	return 0;
+}
+
+void _debug_stringz( char* data )
+{
+	unsigned char c = *data;
+
+	while (c) {
+		while (!( UCSR0A & (1<<UDRE0)));
+		UDR0 = c;
+		c = *(++data);
+	}
+}
+
+void _debug_byte(uint8_t b)
+{
+	while (!( UCSR0A & (1<<UDRE0)));
+	UDR0 = b;
+}
+
+void _debug_byte_as_hex( unsigned char byte )
+{
+	unsigned char c;
+
+	c = pgm_read_byte(&DEBUG_hex[(byte >> 4)]);
+	while ( !( UCSR0A & (1<<UDRE0)));
+	UDR0 = c;
+
+	c = pgm_read_byte(&DEBUG_hex[(byte & 0x0f)]);
+	while ( !( UCSR0A & (1<<UDRE0)));
+	UDR0 = c;
+}
+
+void _debug_hex_dump( uint8_t * data, int length)
+{
+	for (int i=0;i<length;i++)
+	{
+		//printf_P(PSTR("%02X "), (uint8_t)data[i]);
+		_debug_byte_as_hex((unsigned char)data[i]);
+		_debug_byte((uint8_t)' ');
+	}
+	_debug_byte((uint8_t)'\r');
+	_debug_byte((uint8_t)'\n');
+	//printf_P(PSTR("\r\n"));
+}
+
+void _debug_log(const char * prefix, const char * fmt, ...)
+{
+	if (prefix)
+	{
+		printf_P(PSTR("%lu "), clock_millis);
+		printf_P(prefix);
+	}
+	va_list argptr;
+	va_start(argptr, fmt);
+	// Important to use vfprintf_P due to variatic signature
+	// Note that there is no vprintf_P - we have to manually direct to stdout
+	vfprintf_P(stdout, fmt, argptr);
+	va_end(argptr);
+};
+
+
+void debug_test(void)
+{
+	LOG("HELLO WORLD\r\n");
+	// Serial
+	/* Wait for empty transmit buffer */
+	while ( !( UCSR0A & (1<<UDRE0)) )
+	UDR0 = 'C';
+	_delay_ms(500);
+	UDR0 = 'P';
+	_delay_ms(500);
+	UDR0 = 'H';
+	_delay_ms(500);
+
+
+
+}
