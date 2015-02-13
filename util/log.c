@@ -139,6 +139,59 @@ void _debug_log(const char * prefix, const char * fmt, ...)
 	va_end(argptr);
 };
 
+#define MAX_DECIMALS 4
+int find_real_part(float num);
+void _debug_log_float (float to_print);
+
+int find_i_part(int real_length, float num)
+{
+	int i = 10,j;
+	int real_part = find_real_part(num);
+	//truncate real part
+	float temp_float = num - real_part;
+
+	//adjust decimal for MAX_DECIMALS
+	for(j = 0; j< MAX_DECIMALS; j++)
+	{
+		temp_float = temp_float*i;
+	}
+	//return just the MAX_DECIMAL length of the float
+	return (int)(temp_float*i);
+}
+
+int find_real_part(float num)
+{
+	//truncate decimal
+	return (int)num;
+}
+
+void _debug_log_float (float to_print)
+{
+	int real_part, i_part;
+	char output[20], temp[10], init[2] = "";
+
+	memset(output, '\0', sizeof(output));
+	memset(temp, '\0', sizeof(temp));
+
+	//Start with Real Part
+	real_part = find_real_part(to_print);
+	itoa(real_part, temp, 10);
+	strcat(output, temp);
+
+	i_part = find_i_part(strlen(temp), to_print);
+	itoa(i_part, temp, 10);
+
+	//Place the decimal point
+	strcat(output, ".");
+	//Add i Part
+	strcat(output, temp);
+	//Add new line
+	//strcat(output, "\r\n");
+
+
+	LOG("%s", output);
+	strcpy(output, init);
+}
 
 void debug_test(void)
 {
